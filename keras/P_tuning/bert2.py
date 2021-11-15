@@ -1,0 +1,254 @@
+# _*_coding:utf-8_*_
+# 作者     ：YiSan
+# 创建时间  ：2021/11/4 11:09
+# 文件     ：Bert_Ptuning_bc.py
+# IDE     : PyCharm
+
+import numpy as np
+import pandas as pd
+from bert4keras.backend import keras,K
+from bert4keras.layers import Loss, Embedding
+from bert4keras.tokenizers import Tokenizer
+from bert4keras.models import build_transformer_model, BERT
+from bert4keras.optimizers import Adam
+from bert4keras.snippets import sequence_padding, DataGenerator
+from bert4keras.snippets import open
+from bert4keras.layers import Lambda, Dense
+import tensorflow as tf
+
+import os
+# os.environ['TF_KERAS'] = '1'
+
+maxlen = 128
+batch_size = 32
+config_path = '../pre_mode/bert-base-cased-ch/bert_config.json'
+checkpoint_path = '../pre_mode/bert-base-cased-ch/bert_model.ckpt'
+dict_path = '../pre_mode/bert-base-cased-ch/vocab.txt'
+dict_labels = {'其他口号': 0, '工作时间': 0, '要求': 2, '描述': 3, '薪资福利': 4, '公司介绍': 0, '工作地址': 0, '岗位晋升/职业发展': 4, '联系方式': 0,'职位名称':1}
+def load_data(path, sheet_name):
+    T, E, S = [], [], []
+    df = pd.read_excel(path,sheet_name=sheet_name)
+    df_train = df.sample(frac=0.7)
+    df_mid = df[~df.index.isin(df_train.index)]
+    df_test = df_mid.sample(frac=0.7)
+    df_valid = df_mid[~df_mid.index.isin(df_test.index)]
+    for key,row in df_train.iterrows():
+        T.append((row.content,dict_labels[row.label]))
+    for key,row in df_test.iterrows():
+        E.append((row.content,dict_labels[row.label]))
+    for key,row in df_valid.iterrows():
+        S.append((row.content,dict_labels[row.label]))
+    return T,E,S
+
+train_data, test_data, valid_data = load_data(r'P_tuning_data/corpus.xlsx',sheet_name = '按顺序1000')
+
+# 模拟标注和非标注数据
+train_frac = 0.01 # 标注数据的比例
+num_labeled = int(len(train_data) * train_frac)
+unlabeld_data = [(t,2) for t,l in train_data[num_labeled:]] # 无标注数据
+train_data = train_data[:num_labeled] # 标注数据
+
+# 建立分词器
+tokenizer = Tokenizer(dict_path, do_lower_case=True)
+
+# 对应的任务描述
+mask_idx = 5
+desc = ['[unused%s]' % i for i in range(1,9)]
+desc.insert(mask_idx -1,'[MASK]')
+desc_ids = [tokenizer.token_to_id(t) for t in desc]
+print('desc id',desc_ids)
+# 类别id
+id_0 = tokenizer.token_to_id('其')
+id_1 = tokenizer.token_to_id('职')
+id_2 = tokenizer.token_to_id('要')
+id_3 = tokenizer.token_to_id('描')
+id_4 = tokenizer.token_to_id('福')
+
+print('id', id_0)
+def random_masking(token_ids):
+    '''
+    对输入进行随机mask
+    :param token_ids:
+    :return:
+    '''
+    rands = np.random.random(len(token_ids))
+    source, target = [], []
+    for r,t in zip(rands, token_ids):
+        if r < 0.15 * 0.8:
+            source.append(tokenizer._token_mask_id)
+            target.append(t)
+        elif r < 0.15 * 0.9:
+            source.append(t)
+            target.append(t)
+        elif r < 0.15:
+            source.append(np.random.choice(tokenizer._vocab_size -1) + 1)
+            target.append(t)
+        else:
+            source.append(t)
+            target.append(0)
+    return source, target
+
+
+class data_generator(DataGenerator):
+    """数据生成器
+    """
+    def __iter__(self, random=False):
+        batch_token_ids, batch_segment_ids, batch_output_ids = [], [], []
+        for is_end, (text, label) in self.sample(random):
+            token_ids, segment_ids = tokenizer.encode(text, maxlen=maxlen) # [ 101([CLS]), 2769(我), 4263(爱), 704(中), 1744(国), 102([SEP]) ]
+            if label != 6:
+                token_ids = token_ids[:1] + desc_ids + token_ids[1:] # [ 101([CLS]), ...[desc_ids]..., 2769(我), 4263(爱), 704(中), 1744(国), 102([SEP]) ]
+                segment_ids = [0] * len(desc_ids) + segment_ids
+            if random:
+                source_ids, target_ids = random_masking(token_ids)
+            else:
+                source_ids, target_ids = token_ids[:], token_ids[:]
+            if label == 0:
+                source_ids[mask_idx] = tokenizer._token_mask_id
+                target_ids[mask_idx] = id_0
+            elif label == 1:
+                source_ids[mask_idx] = tokenizer._token_mask_id
+                target_ids[mask_idx] = id_1
+            elif label == 2:
+                source_ids[mask_idx] = tokenizer._token_mask_id
+                target_ids[mask_idx] = id_2
+            elif label == 3:
+                source_ids[mask_idx] = tokenizer._token_mask_id
+                target_ids[mask_idx] = id_3
+            elif label == 4:
+                source_ids[mask_idx] = tokenizer._token_mask_id
+                target_ids[mask_idx] = id_4
+            batch_token_ids.append(source_ids)
+            batch_segment_ids.append(segment_ids)
+            batch_output_ids.append(target_ids)
+            if len(batch_token_ids) == self.batch_size or is_end:
+                batch_token_ids = sequence_padding(batch_token_ids)
+                batch_segment_ids = sequence_padding(batch_segment_ids)
+                batch_output_ids = sequence_padding(batch_output_ids)
+                yield [
+                    batch_token_ids, batch_segment_ids, batch_output_ids
+                ], None
+                batch_token_ids, batch_segment_ids, batch_output_ids = [], [], []
+
+class CrossEntropy(Loss):
+    '''
+    交叉熵作为loss， 并mask掉输入部分
+    '''
+    def compute_loss(self, inputs, mask=None):
+        y_true, y_pred = inputs
+        y_mask = K.cast(K.not_equal(y_true, 0), K.floatx()) # [1.,1.,...,0,0]
+        accuacy = keras.metrics.sparse_categorical_crossentropy(y_true, y_pred)
+        accuacy = K.sum(accuacy * y_mask) / K.sum(y_mask)
+        self.add_metric(accuacy, name = 'accuracy')
+        loss = K.sparse_categorical_crossentropy(y_true, y_pred)
+        loss = K.sum(loss * y_mask) / K.sum(y_mask)
+        return loss
+
+class PtuningEmbedding(Embedding):
+    '''
+    定义新的embedding层，只优化部分token
+    '''
+    def call(self, inputs, mode='embedding'):
+        embeddings = self.embeddings
+        embeddings_sg = K.stop_gradient(embeddings)
+        mask = np.zeros((K.int_shape(embeddings)[0],1))
+        mask[1:9] += 1
+        self.embeddings = embeddings * mask + embeddings_sg * (1-mask)
+        outputs = super(PtuningEmbedding, self).call(inputs, mode)
+        self.embeddings = embeddings
+        return outputs
+class PtuningBERT(BERT):
+    '''
+    替换原来的embedding
+    '''
+    def apply(self, inputs=None, layer=None, arguments=None, **kwargs):
+        if layer is Embedding:
+            layer = PtuningEmbedding
+        return super(PtuningBERT, self).apply(inputs, layer, arguments, **kwargs)
+
+# 加载预训练模型
+model = build_transformer_model(
+    config_path=config_path,
+    checkpoint_path=checkpoint_path,
+    model=PtuningBERT,
+    with_mlm = True
+)
+
+for layer in model.layers:
+    if layer.name != 'Embedding-Token':
+        layer.trainable = False
+# 训练用模型
+y_in = keras.layers.Input(shape=(None,))
+output = keras.layers.Lambda(lambda x: x[:, :10])(model.output)
+outputs = CrossEntropy(1)([y_in,model.output])
+
+train_model = keras.models.Model(model.inputs + [y_in], outputs)
+train_model.compile(
+    # loss='binary_crossentropy',
+    optimizer=Adam(6e-4))
+train_model.summary()
+# 预测模型
+model = keras.models.Model(model.inputs, output)
+
+# 转换数据集
+train_generator = data_generator(train_data, batch_size)
+test_generator = data_generator(test_data, batch_size)
+valid_generator = data_generator(valid_data, batch_size)
+
+class Evaluator(keras.callbacks.Callback):
+    def __init__(self):
+        self.best_val_acc = 0.
+    def on_epoch_end(self, epoch, logs=None):
+        val_acc = evaluate(valid_generator)
+        print('val_acc:',val_acc)
+        if val_acc > self.best_val_acc:
+            self.best_val_acc = val_acc
+            model.save_weights('best_model_bert.weights')
+        test_acc = evaluate(test_generator)
+        print(
+            r'val_acc: %.5f, best_val_acc: %.5f, test_acc: %.5f\n' %
+            (val_acc, self.best_val_acc, test_acc)
+        )
+def evaluate(data):
+    total, right = 0., 0.
+    for x_true, _ in data:
+        x_true, y_true = x_true[:2], x_true[2] # y_true (32*batch_seqlength)
+        y_pred = model.predict(x_true) # (32*batch_seqlenght*vocab_size)
+        print(y_pred.shape, type(y_pred))
+        y_pred = y_pred[:, mask_idx, [id_0, id_1, id_2, id_3, id_4]].argmax(axis=1) # (30,)
+        print(y_pred,type(y_pred))
+        y_true_0 = (y_true[:, mask_idx] == id_0).astype(int) # (30,)
+        y_true_1 = (y_true[:, mask_idx] == id_1).astype(int)
+        y_true_2 = (y_true[:, mask_idx] == id_2).astype(int)
+        y_true_3 = (y_true[:, mask_idx] == id_3).astype(int)
+        y_true_4 = (y_true[:, mask_idx] == id_4).astype(int)
+        print('y_true_0', y_true_0)
+        print('y_true_1', y_true_1)
+        print('y_true_2', y_true_2)
+        print('y_true_3', y_true_3)
+        print('y_true_4', y_true_4)
+        total += len(y_true)
+        for i in range(len(y_pred)):
+            if y_true_0[i] == 1 and y_pred[i] == 0:
+                right += 1
+            elif y_true_1[i] == 1 and y_pred[i] == 1:
+                right += 1
+            elif y_true_2[i] == 1 and y_pred[i] == 2:
+                right += 1
+            elif y_true_3[i] == 1 and y_pred[i] == 3:
+                right += 1
+            elif y_true_4[i] == 1 and y_pred[i] == 4:
+                right += 1
+        print('total:',total, 'right:',right)
+    return right / total
+
+if __name__ == '__main__':
+    evaluator = Evaluator()
+    train_model.fit_generator(
+        train_generator.forfit(),
+        steps_per_epoch=len(train_generator) * 50,
+        epochs=100,
+        callbacks=[evaluator]
+    )
+else:
+    model.load_weights('best_model_bert.weights')
