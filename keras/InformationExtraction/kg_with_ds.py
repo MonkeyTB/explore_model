@@ -4,8 +4,9 @@
 # 文件     ：kg_with_ds.py
 # IDE     : PyCharm
 
-
-from __future__ import print_function
+import os
+# os.environ['TF_KERAS'] = '1'
+os.environ['KERAS_BACKEND']='tensorflow'
 import json
 import numpy as np
 from random import choice
@@ -71,8 +72,8 @@ else:
     random_order = json.load(open('data/random_order_vote.json'))
 
 # 打乱数据切分训练和验证
-train_data = [total_data[j] for i, j in enumerate(random_order) if i % 8 != mode]
-dev_data = [total_data[j] for i, j in enumerate(random_order) if i % 8 == mode]
+train_data = [total_data[j] for i, j in enumerate(random_order) if i % 8 != mode][:1000]
+dev_data = [total_data[j] for i, j in enumerate(random_order) if i % 8 == mode][:100]
 
 
 predicates = {} # 格式：{predicate: [(subject, predicate, object)]}
@@ -601,7 +602,7 @@ class Evaluate(Callback):
                     dict(zip(orders, spo)) for spo in T - R
                 ]
             }, ensure_ascii=False, indent=4)
-            F.write(s.encode('utf-8') + '\n')
+            F.write(s + '\n')
         F.close()
         return 2 * A / (B + C), A / B, A / C
 
@@ -619,7 +620,7 @@ def test(test_data):
                 dict(zip(orders, spo + ('', ''))) for spo in R
             ]
         }, ensure_ascii=False)
-        F.write(s.encode('utf-8') + '\n')
+        F.write(s + '\n')
     F.close()
 
 
