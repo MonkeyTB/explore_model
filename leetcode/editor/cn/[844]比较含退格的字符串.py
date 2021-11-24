@@ -61,19 +61,22 @@
 
 # leetcode submit region begin(Prohibit modification and deletion)
 class Solution:
+    '''
+    22:26	info
+			解答成功:
+			执行耗时:32 ms,击败了68.27% 的Python3用户
+			内存消耗:14.7 MB,击败了99.00% 的Python3用户
+	栈方式：
+	最简单也最容易思考
+    '''
+    def help(self, s):
+        du = []
+        for i in s:
+            if i != '#': du.append(i)
+            if i == '#' and len(du) > 0: du.pop(-1)
+        return du
     def backspaceCompare(self, s, t) :
-        left, right = len(s) - 1, len(t) - 1
-        while left >= 0 and right >= 0:
-            if s[left] == '#': left -= 2
-            if t[right] == '#': right -= 2
-            if left >= 0 and right >= 0:
-                if s[left] != t[right]:
-                    return False
-                else:
-                    left -= 1
-                    right -= 1
-        if left != right: return False
-        return True
+        return self.help(s) == self.help(t)
+
+
 # leetcode submit region end(Prohibit modification and deletion)
-ob = Solution()
-ob.backspaceCompare('xywrrmp','xywrrmu#p')
