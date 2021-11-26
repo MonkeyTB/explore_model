@@ -6,6 +6,10 @@
 import tensorflow as tf
 import json,os
 from my_log import logger
+from args_help import args
+import jieba
+import numpy as np
+from lp_pyhanlp import *
 
 def mkdir(path):
     folder = os.path.exists(path)
@@ -33,7 +37,7 @@ def build_vocab(corpus_file_list, vocab_file, tag_file):
                 # raise e
 
     if not os.path.exists(vocab_file):
-        with open(vocab_file,"w") as f:
+        with open(vocab_file, "w", encoding='utf-8') as f:
             for index,word in enumerate(['<PAD>','<UNK>']+list(words) ):
                 f.write(word+"\n")
 
@@ -49,8 +53,8 @@ def build_vocab(corpus_file_list, vocab_file, tag_file):
            key=lambda x: (len(x.split("-")), x.split("-")[-1], tag_sort.get(x.split("-")[0], 100))
            )
     if not os.path.exists(tag_file):
-        with open(tag_file,"w") as f:
-            for index,tag in enumerate(["<UNK>"]+tags):
+        with open(tag_file,"w",encoding='utf-8') as f:
+            for index,tag in enumerate(tags):
                 f.write(tag+"\n")
 
 # build_vocab(["./data/train.utf8","./data/test.utf8"])
@@ -67,33 +71,51 @@ def read_vocab(vocab_file):
 # print(read_vocab("./data/tags.txt"))
 
 
-
-def tokenize(filename,vocab2id,tag2id):
+def tokenize(filename,vocab2id,tag2id,word2id):
     contents = []
     labels = []
+    sententces = []
     content = []
     label = []
+    sentence = ''
     with open(filename, 'r', encoding='utf-8') as fr:
-        for line in [elem.strip() for elem in fr.readlines()][:500000]:
+        for line in [elem.strip() for elem in fr.readlines()]:
             try:
                 if line != "end":
                     w,t = line.split()
+                    sentence += w
                     content.append(vocab2id.get(w,vocab2id['<UNK>']))
                     label.append(tag2id.get(t,tag2id['<UNK>']))
                 else:
                     if content and label:
                         contents.append(content)
                         labels.append(label)
+                        sententces.append(sentence)
+
                     content = []
                     label = []
+                    sentence = ''
             except Exception as e:
                 content = []
                 label = []
-    contents = tf.keras.preprocessing.sequence.pad_sequences(contents, padding='post')
+                sentence = ''
+    contents = tf.keras.preprocessing.sequence.pad_sequences(contents, padding='post') # 141*31
     labels = tf.keras.preprocessing.sequence.pad_sequences(labels, padding='post')
+    if args.mix_word_char:
+        words = []
+        for sentence in sententces:
+            seg_list = [[i]*len(i) for i in [j.word for j in HanLP.segment(sentence)]]
+            seg_list = [word2id.get(i,word2id['<UNK>']) for j in seg_list for i in j]
+            words.append(seg_list)
+        words = tf.keras.preprocessing.sequence.pad_sequences(words, padding='post')
+        return contents, labels, len(contents[0]), words
     return contents,labels,len(contents[0])
 
-
+def load_embedding_matrix(filepath):
+    """
+    加载 embedding_matrix_path
+    """
+    return np.load(filepath + '.npy')
 
 
 

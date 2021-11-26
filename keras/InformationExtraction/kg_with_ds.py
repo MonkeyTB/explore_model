@@ -331,7 +331,7 @@ class Attention(Layer):
         o = K.batch_dot(a_reshape, vw, [2, 1])
         o = K.reshape(o, (-1, K.shape(a)[1], K.shape(o)[1], K.shape(o)[2]))
 
-        o = K.permute_dimensions(o, (0, 2, 1, 3))
+        o = K.permute_dimensions( o, (0, 2, 1, 3) )
         o = K.reshape(o, (-1, K.shape(o)[1], self.out_dim))
         o = self.mask(o, q_mask, 'mul')
         return o
@@ -339,14 +339,14 @@ class Attention(Layer):
         return (input_shape[0][0], input_shape[0][1], self.out_dim)
 
 
-t1_in = Input(shape=(None,))
-t2_in = Input(shape=(None, word_size))
-s1_in = Input(shape=(None,))
-s2_in = Input(shape=(None,))
-k1_in = Input(shape=(1,))
-k2_in = Input(shape=(1,))
-o1_in = Input(shape=(None, num_classes))
-o2_in = Input(shape=(None, num_classes))
+t1_in = Input(shape=(None,)) # 字
+t2_in = Input(shape=(None, word_size)) # 词
+s1_in = Input(shape=(None,)) # 主实体起始标签
+s2_in = Input(shape=(None,)) # 主实体结束标签
+k1_in = Input(shape=(1,)) # 送入模型的S的起始位置
+k2_in = Input(shape=(1,)) # 送入模型的S的结束位置
+o1_in = Input(shape=(None, num_classes)) # 客实体起始标签
+o2_in = Input(shape=(None, num_classes)) # 客实体结束标签
 
 t1, t2, s1, s2, k1, k2, o1, o2 = t1_in, t2_in, s1_in, s2_in, k1_in, k2_in, o1_in, o2_in
 mask = Lambda(lambda x: K.cast(K.greater(K.expand_dims(x, 2), 0), 'float32'))(t1)
@@ -365,12 +365,12 @@ pid = Lambda(position_id)(t1)
 position_embedding = Embedding(maxlen, char_size, embeddings_initializer='zeros')
 pv = position_embedding(pid)
 
-t1 = Embedding(len(char2id)+2, char_size)(t1) # 0: padding, 1: unk
-t2 = Dense(char_size, use_bias=False)(t2) # 词向量也转为同样维度
-t = Add()([t1, t2, pv]) # 字向量、词向量、位置向量相加
+t1 = Embedding(len(char2id)+2, char_size)(t1) # 0: padding, 1: unk (None, None, 128)
+t2 = Dense(char_size, use_bias=False)(t2) # 词向量也转为同样维度 (None, None, 128)
+t = Add()([t1, t2, pv]) # 字向量、词向量、位置向量相加 (None, None, 128)
 t = Dropout(0.25)(t)
 t = Lambda(lambda x: x[0] * x[1])([t, mask])
-t = dilated_gated_conv1d(t, mask, 1)
+t = dilated_gated_conv1d(t, mask, 1) # 12层DGCNN 空洞卷积
 t = dilated_gated_conv1d(t, mask, 2)
 t = dilated_gated_conv1d(t, mask, 5)
 t = dilated_gated_conv1d(t, mask, 1)
@@ -384,11 +384,12 @@ t = dilated_gated_conv1d(t, mask, 1)
 t = dilated_gated_conv1d(t, mask, 1)
 t_dim = K.int_shape(t)[-1]
 
-pn1 = Dense(char_size, activation='relu')(t)
-pn1 = Dense(1, activation='sigmoid')(pn1)
+# 共享编码层，对应模型图
+pn1 = Dense(char_size, activation='relu')(t) # (None, None, 128)
+pn1 = Dense(1, activation='sigmoid')(pn1) # (None, None, 1)
 pn2 = Dense(char_size, activation='relu')(t)
 pn2 = Dense(1, activation='sigmoid')(pn2)
-
+# 抽取S， 对应模型图
 h = Attention(8, 16)([t, t, t, mask])
 h = Concatenate()([t, h])
 h = Conv1D(char_size, 3, activation='relu', padding='same')(h)
@@ -399,10 +400,10 @@ ps2 = Lambda(lambda x: x[0] * x[1])([ps2, pn2])
 
 subject_model = Model([t1_in, t2_in], [ps1, ps2]) # 预测subject的模型
 
-
+# 全局关系检测模块
 t_max = Lambda(seq_maxpool)([t, mask])
 pc = Dense(char_size, activation='relu')(t_max)
-pc = Dense(num_classes, activation='sigmoid')(pc)
+pc = Dense(num_classes, activation='sigmoid')(pc) # (None, 1, 49)
 
 def get_k_inter(x, n=6):
     seq, k1, k2 = x
@@ -411,21 +412,21 @@ def get_k_inter(x, n=6):
     k_inter = [K.expand_dims(k, 1) for k in k_inter]
     k_inter = K.concatenate(k_inter, 1)
     return k_inter
-
+# S 实体，模型补齐到 6
 k = keras.layers.Lambda(get_k_inter, output_shape=(6, t_dim))([t, k1, k2])
-k = keras.layers.Bidirectional( keras.layers.GRU(t_dim) )(k) # k = Bidirectional(CuDNNGRU(t_dim))(k)
-k1v = position_embedding(keras.layers.Lambda(position_id)([t, k1]))
-k2v = position_embedding(keras.layers.Lambda(position_id)([t, k2]))
-kv = Concatenate()([k1v, k2v])
-k = keras.layers.Lambda(lambda x: K.expand_dims(x[0], 1) + x[1])([k, kv])
+k = keras.layers.Bidirectional( keras.layers.GRU(t_dim) )(k) # k = Bidirectional(CuDNNGRU(t_dim))(k) # (None, 256)
+k1v = position_embedding(keras.layers.Lambda(position_id)([t, k1])) # (None, None, 128)
+k2v = position_embedding(keras.layers.Lambda(position_id)([t, k2])) # (None, None, 128)
+kv = Concatenate()([k1v, k2v]) # (None, None, 256)
+k = keras.layers.Lambda(lambda x: K.expand_dims(x[0], 1) + x[1])([k, kv]) # (None, None, 256)
 
-h = Attention(8, 16)([t, t, t, mask])
-h = Concatenate()([t, h, k])
-h = Conv1D(char_size, 3, activation='relu', padding='same')(h)
-po = Dense(1, activation='sigmoid')(h)
-po1 = Dense(num_classes, activation='sigmoid')(h)
-po2 = Dense(num_classes, activation='sigmoid')(h)
-po1 = keras.layers.Lambda(lambda x: x[0] * x[1] * x[2] * x[3])([po, po1, pc, pn1])
+h = Attention(8, 16)([t, t, t, mask]) # (None, None, 128)
+h = Concatenate()([t, h, k]) # (None, None, 512) 521 = 128+128+256
+h = Conv1D(char_size, 3, activation='relu', padding='same')(h) # (None, None, 128)
+po = Dense(1, activation='sigmoid')(h) # (None, None, 1)
+po1 = Dense(num_classes, activation='sigmoid')(h) # (None, None, 49)
+po2 = Dense(num_classes, activation='sigmoid')(h) # (None, None, 49)
+po1 = keras.layers.Lambda(lambda x: x[0] * x[1] * x[2] * x[3])([po, po1, pc, pn1]) # (None, None, 49)
 po2 = keras.layers.Lambda(lambda x: x[0] * x[1] * x[2] * x[3])([po, po2, pc, pn2])
 
 object_model = Model([t1_in, t2_in, k1_in, k2_in], [po1, po2]) # 输入text和subject，预测object及其关系
@@ -437,9 +438,9 @@ train_model = Model([t1_in, t2_in, s1_in, s2_in, k1_in, k2_in, o1_in, o2_in],
 s1 = K.expand_dims(s1, 2)
 s2 = K.expand_dims(s2, 2)
 
-s1_loss = K.binary_crossentropy(s1, ps1)
+s1_loss = K.binary_crossentropy(s1, ps1) # s 起始的label 和 pred
 s1_loss = K.sum(s1_loss * mask) / K.sum(mask)
-s2_loss = K.binary_crossentropy(s2, ps2)
+s2_loss = K.binary_crossentropy(s2, ps2) # s 结束的label 和 pred
 s2_loss = K.sum(s2_loss * mask) / K.sum(mask)
 
 o1_loss = K.sum(K.binary_crossentropy(o1, po1), 2, keepdims=True)
@@ -499,8 +500,8 @@ def extract_items(text_in):
     _t1 = [char2id.get(c, 1) for c in text_in]
     _t1 = np.array([_t1])
     _t2 = sent2vec([text_words])
-    _k1, _k2 = subject_model.predict([_t1, _t2])
-    _k1, _k2 = _k1[0, :, 0], _k2[0, :, 0]
+    _k1, _k2 = subject_model.predict([_t1, _t2]) # (1, 102, 1)
+    _k1, _k2 = _k1[0, :, 0], _k2[0, :, 0] # (102,)
     _k1, _k2 = np.where(_k1 > 0.5)[0], np.where(_k2 > 0.4)[0]
     _subjects = []
     for i in _k1:
