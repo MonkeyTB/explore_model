@@ -9,7 +9,7 @@ from my_log import logger
 from args_help import args
 import jieba
 import numpy as np
-from lp_pyhanlp import *
+from pyhanlp import *
 
 def mkdir(path):
     folder = os.path.exists(path)

@@ -48,24 +48,22 @@ class NerModelWord(tf.keras.Model):
         self.embedding_size = embedding_size
 
         self.embedding_char = tf.keras.layers.Embedding(char_size, embedding_size)
-        self.embedding_word = tf.keras.layers.Embedding(word_size, embedding_size, weights=[embedding_matrix], trainable=False)
+        self.embedding_word = tf.keras.layers.Embedding(word_size, 100, weights=[embedding_matrix], trainable=False)
         self.biLSTM = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(hidden_num, return_sequences=True))
         self.dense = tf.keras.layers.Dense(label_size)
-        self.dense_word = tf.keras.layers.Dense(embedding_size)
+        self.dense_word = tf.keras.layers.Dense(embedding_size, use_bias=False)
 
         self.transition_params = tf.Variable(tf.random.uniform(shape=(label_size, label_size)))
-        self.dropout = tf.keras.layers.Dropout(0.5)
 
 
 
-    @tf.function(input_signature=(tf.TensorSpec([None, None], tf.int32),tf.TensorSpec([None, None], tf.int32), tf.TensorSpec([None, None], tf.int32)))
+#     @tf.function(input_signature=(tf.TensorSpec([None, None], tf.int32),tf.TensorSpec([None, None], tf.int32), tf.TensorSpec([None, None], tf.int32)))
     def call(self, char, word, labels=None):
         # -1 change 0
         inputs_char = self.embedding_char(char)
         inputs_word = self.embedding_word(word)
         inputs_word = self.dense_word(inputs_word)
         inputs = tf.keras.layers.add([inputs_word, inputs_char])
-        inputs = self.dropout(inputs, True)
         logits = self.dense(self.biLSTM(inputs))
         text_lens = tf.math.reduce_sum(tf.cast(tf.math.not_equal(char, 0), dtype=tf.int32), axis=-1)
         if labels is not None:
@@ -77,4 +75,4 @@ class NerModelWord(tf.keras.Model):
             self.crf_dec = tf_ad.text.crf_decode(logits, self.transition_params, text_lens)
             return logits, text_lens, log_likelihood, self.crf_dec[0]
         else:
-            return logits, text_lens, self.crf_dec[0]
+            return logits, text_lens
