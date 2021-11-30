@@ -1,7 +1,7 @@
 #_Author_:Monkey
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
-from tensorflow.keras.layers import Input, Dense, Flatten, Masking
+from tensorflow.keras.layers import Input, Dense, Flatten, Masking, RNN
 from tensorflow.keras.models import Sequential, Model
 layer = Dense(32)
 config = layer.get_config()
@@ -104,3 +104,67 @@ model = Sequential()
 model.add(Masking(mask_value=0., input_shape=(timesteps, features)))
 model.add(LSTM(32))
 '''
+
+# 8. keras实现自定义层
+'''
+对于简单的无定义的自定义操作,可以通过keras.core.Lambda层实现,对于包含可训练权重的自定义层,应该自己实现这些层
+需要实现三个方法
+1. build(input_shape):这是定义权重的地方,这个方法必须设self.build = True,可以通过调用super(Layer,self).build()
+2. call(x):这里编写层的功能逻辑的地方,需要关注传入call的第一个参数:输入张量,除非你希望你的层支持masking
+3. compute_output_shape(input_shape): 如果你的层更改了输入张量的形状，你应该在这里定义形状变化的逻辑，这让Keras能够自动推断各层的形状。
+'''
+from keras import backend as K
+from keras.engine.topology import Layer
+
+class MyLayer(Layer):
+
+    def __init__(self, output_dim, **kwargs):
+        self.output_dim = output_dim
+        super(MyLayer, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        # 为该层创建一个可训练的权重
+        self.kernel = self.add_weight(name='kernel',
+                                      shape=(input_shape[1], self.output_dim),
+                                      initializer='uniform',
+                                      trainable=True)
+        super(MyLayer, self).build(input_shape)  # 一定要在最后调用它
+
+    def call(self, x):
+        return K.dot(x, self.kernel)
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], self.output_dim)
+
+'''
+还可以定义具有多个输入张量和多个输出张量的 Keras 层。 
+为此，你应该假设方法 build(input_shape)，call(x) 和 compute_output_shape(input_shape) 的输入输出都是列表。 
+这里是一个例子，与上面那个相似：
+'''
+from keras import backend as K
+from keras.engine.topology import Layer
+
+class MyLayer(Layer):
+
+    def __init__(self, output_dim, **kwargs):
+        self.output_dim = output_dim
+        super(MyLayer, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        assert isinstance(input_shape, list)
+        # 为该层创建一个可训练的权重
+        self.kernel = self.add_weight(name='kernel',
+                                      shape=(input_shape[0][1], self.output_dim),
+                                      initializer='uniform',
+                                      trainable=True)
+        super(MyLayer, self).build(input_shape)  # 一定要在最后调用它
+
+    def call(self, x):
+        assert isinstance(x, list)
+        a, b = x
+        return [K.dot(a, self.kernel) + b, K.mean(b, axis=-1)]
+
+    def compute_output_shape(self, input_shape):
+        assert isinstance(input_shape, list)
+        shape_a, shape_b = input_shape
+        return [(shape_a[0], self.output_dim), shape_b[:-1]]
