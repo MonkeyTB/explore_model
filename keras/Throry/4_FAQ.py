@@ -136,3 +136,53 @@ model = load_model('my_model.h5', custom_objects={'AttentionLayer':AttentionLaye
 from tensorflow.keras.utils import CustomObjectScope
 with CustomObjectScope({'AttentionLayer':AttentionLayer}):
 	model = load_model('my_model.h5')
+
+# 8. 如何获取中间层得输出
+from tensorflow.keras.models import Model
+model = ...# 创建原始模型
+layer_name = 'my_layer'
+intermediate_layer_model = Model(inputs = model.input, outputs = model.get_layer(layer_name).output)
+intermediate_output = intermediate_layer_model.predict(data)
+# 你也可以构建一个 Keras 函数，该函数将在给定输入的情况下返回某个层的输出，例如：
+from tensorflow.keras import backend as K
+# 以 Sequential 模型为例
+get_3rd_layer_output = K.function([model.layers[0].input
+								   model.layers[3].output])
+layer_output = get_3rd_layer_output([x])[0]
+# 9. 在验证集的误差不再下降时，如何中断训练？
+from tensorflow.keras.callbacks import EarlyStopping
+early_stopping = EarlyStopping(monitor='loss', patience=2)
+model.fit(x, y, callable=[early_stopping])
+
+# 10. Model类继承
+
+from tensorflow import keras
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
+class SimpleMLP(Model):
+	def __init__(self, use_bn = False, use_dp = False, num_class = 10):
+		self.use_bn = use_bn
+		self.use_dp = use_dp
+		self.num_class = num_class
+
+		self.dense1 = Dense(32, activation = 'relu')
+		self.dense2 = Dense(num_class, activation = 'softmax')
+		if self.use_dp:
+			self.dp = Dropout(0.5)
+		if self.use_bn:
+			self.bn = BatchNormalization(axis = 1)
+	def call(self, inputs):
+		x = self.dense1(inputs)
+		if self.use_dp:
+			x = self.dp(x)
+		if self.use_bn:
+			x = self.bn
+		return self.dense2(x)
+model = SimpleMLP()
+model.compile(...)
+model.fit(...)
+'''
+网络层定义在 __init__(self, ...) 中，前向传播在 call(self, inputs) 中指定。
+在 call 中，你可以指定自定义的损失函数，通过调用 self.add_loss(loss_tensor) 
+（就像你在自定义层中一样）。
+'''
