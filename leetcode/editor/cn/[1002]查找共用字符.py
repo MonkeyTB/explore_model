@@ -32,16 +32,24 @@
 # leetcode submit region begin(Prohibit modification and deletion)
 class Solution:
     def commonChars(self, words):
+        '''
+        22:19	info
+			解答成功:
+			执行耗时:48 ms,击败了62.22% 的Python3用户
+			内存消耗:15.2 MB,击败了10.93% 的Python3用户
+        注意：二维list，min函数不能求得每一列最小值，需要二次封装
+        '''
         list_num = [[0 for i in range(26)] for j in range(len(words))]
-        # list_num = [[0 for _ in range(26)] for _ in range(len(words))]
         for i,word in enumerate(words):
             for j,w in enumerate(word):
                 list_num[i][ord(w)-97] += 1
-        list_num = min(list_num)
+        list_min = []
+        for i in range(len(list_num[0])):
+            list_min.append(min([x[i] for x in list_num]))
         res = []
         for i in range(26):
-            if list_num[i] > 0:
-                res.append([chr(ord('a')+i)]*list_num[i])
+            if list_min[i] > 0:
+                res.append([chr(ord('a')+i)]*list_min[i])
         return [j for i in res for j in i]
 
 ob = Solution()
