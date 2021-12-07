@@ -16,7 +16,7 @@ dict_path = '../../../../pre_mode/bert-base-cased-ch/vocab.txt'
 # 建立分词器
 tokenizer = Tokenizer(dict_path, do_lower_case=True)
 categories = ['上限工作年限', '上限年龄', '下限工作年限', '下限年龄', '专业', '区间工作年限', '区间年龄', '学位', '学历', '学历类型', '学校类型', '技能词', '行业', '语言']
-model =  tf.saved_model.load('./1/')
+model = tf.saved_model.load('./1/')
 class NamedEntityRecognizer(object):
     """命名实体识别器
     """
