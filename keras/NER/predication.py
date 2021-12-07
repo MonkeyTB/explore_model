@@ -21,7 +21,7 @@ class NamedEntityRecognizer(object):
     """命名实体识别器
     """
     def recognize(self, text, threshold=0):
-        tokens = tokenizer.tokenize(text, maxlen=256)
+        tokens = tokenizer.tokenize(text, maxlen=512)
         mapping = tokenizer.rematch(text, tokens)
         token_ids = tokenizer.tokens_to_ids(tokens)
         segment_ids = [0] * len(token_ids)

@@ -15,6 +15,7 @@ from bert4keras.optimizers import Adam
 from bert4keras.snippets import sequence_padding, DataGenerator
 from bert4keras.snippets import open, to_array
 from keras.models import Model
+import tensorflow as tf
 from tqdm import tqdm
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
@@ -98,11 +99,14 @@ def global_pointer_f1_score(y_true, y_pred):
     给GlobalPointer设计F1
     '''
     y_pred = K.cast(K.greater(y_pred, 0), K.floatx())
+    y_pred = K.cast(K.greater(y_pred, 0), K.floatx())
     return 2 * K.sum(y_true * y_pred) / K.sum(y_true + y_pred)
 
 
 model = build_transformer_model(config_path, checkpoint_path)
-output = GlobalPointer(len(categories), 64)(model.output)
+# model.input [<tf.Tensor 'Input-Token:0' shape=(None, None) dtype=float32>, <tf.Tensor 'Input-Segment:0' shape=(None, None) dtype=float32>]
+# model.output shape=(None, None, 768)
+output = GlobalPointer(len(categories), 64)(model.output) # output <tf.Tensor 'global_pointer_1/truediv:0' shape=(None, 9, None, None) dtype=float32>
 
 model = Model(model.input, output)
 model.summary()
@@ -110,7 +114,7 @@ model.summary()
 model.compile(
     loss = global_pointer_crossentropy,
     optimizer = Adam(learning_rate),
-    metrice = [global_pointer_f1_score]
+    metrics = [global_pointer_f1_score]
 )
 
 class NameEntityRecognizer(object):
@@ -193,6 +197,19 @@ if __name__ == '__main__':
 
     evaluator = Evaluator()
     train_generator = data_generator(train_data, batch_size)
+    '''
+    for x,y in train_generator:
+        print(x,y)
+        break
+    len(x) = 2 : token_id, segment_id
+    x[0].shape = (4,45)
+    len(y) = 4 
+    y.shape = (4, 9, 45, 45)
+    y[0].shape = (9,45,45)
+    4 : batch_size
+    9 : label_size
+    (45,45) : (text_length, text_length)
+    '''
 
     model.fit(
         train_generator.forfit(),
