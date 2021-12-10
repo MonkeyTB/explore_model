@@ -44,3 +44,5 @@ python tf-server.py
     + True ： 汉字
     + False : 数字
 
+# 20211210_02_YiSan
++ 添加修正的交叉熵損失在model.py中，各個模型可以靈活替換，參考來源![鏈接](https://spaces.ac.cn/archives/4293)
