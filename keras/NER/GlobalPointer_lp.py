@@ -118,7 +118,7 @@ model.summary()
 model.compile(
     loss = global_pointer_crossentropy,
     optimizer = Adam(learning_rate),
-    metrice = [global_pointer_f1_score]
+    metrics = [global_pointer_f1_score]
 )
 
 class NameEntityRecognizer(object):

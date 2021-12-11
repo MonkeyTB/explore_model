@@ -47,6 +47,12 @@ import os
 from utils.config import *
 from utils.log import log
 
+margin = 0.6
+theta = lambda t : (K.sign(t) + 1.) / 2
+def bes_loss(y_true, y_pred):
+    return - (1 - theta(y_true - margin) * theta(y_pred - margin)
+            - theta(1 - margin - y_true) * theta(1 - margin - y_pred)
+         ) * (y_true * K.log(y_pred + 1e-8) + (1 - y_true) * K.log(1 - y_pred + 1e-8))
 
 class EmbeddingVector(object):
     def __init__(self, path):
