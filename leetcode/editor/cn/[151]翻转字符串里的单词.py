@@ -94,6 +94,6 @@ class Solution:
                 if len(mid) > 0:
                     res.append(''.join(mid) )
                     mid = []
-        res.append(''.join(mid))
+        res.append(''.join(mid)) # 防止末尾不是空格的情况，但会引入''的mid，所以在下一步判断一下
         return ' '.join([i for i in reversed(res) if i != ''])
 # leetcode submit region end(Prohibit modification and deletion)
