@@ -34,13 +34,17 @@
 # leetcode submit region begin(Prohibit modification and deletion)
 class Solution:
     def get_next(self, sub):
+        # 初始全为0
         next = [0]*len(sub)
-        j = 0
-        for i in range(1, len(sub), 1):
+        j = 0 # 前缀头
+        for i in range(1, len(sub), 1): # i 后缀头
+            # 前后缀不相同，并且j大于0，j回退至相同
             while sub[i] != sub[j] and j > 0:
                 j = next[j-1]
+            # 前后缀相同，则j+1
             if sub[i] == sub[j]:
                 j += 1
+            # next表更新
             next[i] = j
         return next
     def repeatedSubstringPattern(self, s: str) -> bool:
