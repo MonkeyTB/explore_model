@@ -43,7 +43,7 @@ while True:
 
 
 ## savemodel
-model =  tf.saved_model.load(args.savemode_dir)
+model = tf.saved_model.load(args.savemode_dir)
 while True:
     text = input("input:")
     dataset = tf.keras.preprocessing.sequence.pad_sequences([[vocab2id.get(char,0) for char in text]], padding='post',maxlen=27)
