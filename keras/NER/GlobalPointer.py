@@ -99,7 +99,6 @@ def global_pointer_f1_score(y_true, y_pred):
     给GlobalPointer设计F1
     '''
     y_pred = K.cast(K.greater(y_pred, 0), K.floatx())
-    y_pred = K.cast(K.greater(y_pred, 0), K.floatx())
     return 2 * K.sum(y_true * y_pred) / K.sum(y_true + y_pred)
 
 
