@@ -46,14 +46,17 @@ import os
 
 from utils.config import *
 from utils.log import log
+from utils.loss import *
 
-margin = 0.6
-theta = lambda t : (K.sign(t) + 1.) / 2
-def bes_loss(y_true, y_pred):
-    return - (1 - theta(y_true - margin) * theta(y_pred - margin)
-            - theta(1 - margin - y_true) * theta(1 - margin - y_pred)
-         ) * (y_true * K.log(y_pred + 1e-8) + (1 - y_true) * K.log(1 - y_pred + 1e-8))
 
+
+'''
+传统模型    start
+主要涉及到
+1、embedding 表达方式
+2、机器学习模型
+3、切词
+'''
 class EmbeddingVector(object):
     def __init__(self, path):
         self.model = gensim.models.Word2Vec.load(path)
@@ -90,8 +93,6 @@ class EmbeddingVector(object):
         if type(v) != np.ndarray:
             return np.zeros(300)
         return (v / np.sqrt((v ** 2).sum()))
-
-
 class BasicModels(TfidfVectorizer):
     '''
     tf-idf
@@ -189,12 +190,23 @@ class BasicModels(TfidfVectorizer):
         else:
             predictions = clf.predict_proba(x_test.tocsc())
         return predictions
+'''
+传统模型    end
+'''
 
 
+
+'''
+深度学习模型 strat
+1、text cnn
+2、多embedding text cnn
+3、rcnn
+4、text rnn
+5、TextAttBiRNN
+'''
 class TextCnn(object):
     def __init__(self):
         pass
-
     def matrix_func(self, embedding_path):
         '''
         :param embedding_path: 向量文件
@@ -217,11 +229,12 @@ class TextCnn(object):
         :return:
         '''
         inputs = Input(shape=(seq_length,), name='input_data')
+        # 有预训练好的词向量模型
         if os.path.exists(config.embedding_path):
             embddding = self.matrix_func(config.embedding_path)
         embed_initer = keras.initializers.RandomUniform(minval=-1, maxval=1)
-        embed = keras.layers.Embedding(vocab_size, embed_size, embeddings_initializer=embed_initer,
-                                       # weights = [embedding],
+        embed = keras.layers.Embedding(vocab_size, embed_size, embeddings_initializer=embed_initer, # 默认初始化就是 uniform
+                                       # weights = [embedding], # 有预训练 embedding 文件，打开此处
                                        input_length=seq_length,
                                        name='embdding')(inputs)
         # 单通道。如果使用真正的嵌入，你可以设置一个静态的
@@ -261,112 +274,12 @@ class TextCnn(object):
         model = self.TextCNN(vocab_size, seq_length, config.embedding_size, config.numclass, config.num_filters,
                              config.kernel_size, config.regularizers_lambda, config.dropout)
         model.summary()
-        model.compile(tf.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
-        tb_callback = keras.callbacks.TensorBoard(histogram_freq=0.1, write_graph=True,
-                                                  write_grads=True, write_images=True,
-                                                  embeddings_freq=0.5, update_freq='batch')
-        history = model.fit(x=x_train, y=y_train, batch_size=config.batch_size, epochs=config.epochs,
-                            callbacks=[tb_callback], validation_split=0.1, shuffle=True)
-        log("\nSaving model...")
-        keras.models.save_model(model, save_path)
-        log(history.history)
-
-    def test(self, model, x_test, y_test):
-        log("Test...")
-        y_pred_one_hot = model.predict(x=x_test, batch_size=1, verbose=1)
-        # y_pred = tf.math.argmax(y_pred_one_hot, axis=1)
-        return y_pred_one_hot
-
-
-class TextCnnNew(object):
-    def __init__(self):
-        pass
-
-    def matrix_func(self, embedding_path):
-        '''
-        :param embedding_path: 向量文件
-        :return: numpy 数组，每行一个词向量
-        '''
-        matrix = np.load(embedding_path)
-        return matrix
-
-    def TextCnnNew(self, vocab_size, seq_length, embed_size, num_classes, num_filters, filter_sizes,
-                   regularizers_lambda, dropout_rate):
-        '''
-        :param vocab_size: 词汇表大小
-        :param seq_length: 句子长度
-        :param embed_size: 词向量大小
-        :param num_classes: num 分类
-        :param num_filters: 卷积通道数
-        :param filter_sizes: 卷积核大小'2,3,4'
-        :param regularizers_lambda:
-        :param dropout_rate:
-        :return:
-        '''
-        inputs = Input(shape=(seq_length,), name='input_data')
-        if os.path.exists(config.embedding_path):
-            embddding = self.matrix_func(config.embedding_path)
-        embed_initer = keras.initializers.RandomUniform(minval=-1, maxval=1)
-        embed1 = keras.layers.Embedding(vocab_size, 100, embeddings_initializer=embed_initer,
-                                        # weights = [embedding],
-                                        input_length=seq_length,
-                                        name='embdding1')(inputs)
-        embed2 = keras.layers.Embedding(vocab_size, 200, embeddings_initializer=embed_initer,
-                                        # weights = [embedding],
-                                        input_length=seq_length,
-                                        name='embdding2')(inputs)
-        embed3 = keras.layers.Embedding(vocab_size, 300, embeddings_initializer=embed_initer,
-                                        # weights = [embedding],
-                                        input_length=seq_length,
-                                        name='embdding3')(inputs)
-
-        embed1 = keras.layers.Dense(50, name='dense1')(embed1)
-        embed2 = keras.layers.Dense(50, name='dense2')(embed2)
-        embed3 = keras.layers.Dense(50, name='dense3')(embed3)
-
-        embed1 = keras.layers.BatchNormalization()(embed1)
-        embed2 = keras.layers.BatchNormalization()(embed2)
-        embed3 = keras.layers.BatchNormalization()(embed3)
-
-        embed = keras.layers.concatenate([embed1, embed2, embed3], axis=-1, name='concatenate1')
-        embed = keras.layers.Reshape((seq_length, 150, 1), name='add_channel')(embed)
-        #         embed = keras.layers.Flatten(data_format='channels_last',name='flatten1')(embed)
-        pool_outputs = []
-        for filter_size in list(map(int, filter_sizes.split(','))):
-            filter_shape = (filter_size, 150)
-            conv = keras.layers.Conv2D(num_filters, filter_shape,
-                                       strides=(1, 1), padding='valid',
-                                       data_format='channels_last',
-                                       activation='relu',
-                                       kernel_initializer='glorot_normal',
-                                       bias_initializer=keras.initializers.constant(0.1),
-                                       name='convolution_{:d}'.format(filter_size))(embed)
-            max_pool_shape = (seq_length - filter_size + 1, 1)
-            pool = keras.layers.MaxPooling2D(pool_size=max_pool_shape,
-                                             strides=(1, 1), padding='valid',
-                                             data_format='channels_last',
-                                             name='max_pooling_{:d}'.format(filter_size))(conv)
-            pool_outputs.append(pool)
-        pool_outputs = keras.layers.concatenate(pool_outputs, axis=-1, name='concatenate')
-        pool_outputs = keras.layers.Flatten(data_format='channels_last', name='flatten')(pool_outputs)
-        pool_outputs = keras.layers.Dropout(dropout_rate, name='dropout')(pool_outputs)
-
-        outputs = keras.layers.Dense(num_classes, activation='softmax',
-                                     kernel_initializer='glorot_normal',
-                                     bias_initializer=keras.initializers.constant(0.1),
-                                     kernel_regularizer=keras.regularizers.l2(regularizers_lambda),
-                                     bias_regularizer=keras.regularizers.l2(regularizers_lambda),
-                                     name='dense')(pool_outputs)
-        model = keras.Model(inputs=inputs, outputs=outputs)
-        return model
-
-    def train(self, x_train, y_train, vocab_size, seq_length, save_path, timestamp):
-        log('\n Train ...')
-        log(vocab_size)
-        model = self.TextCnnNew(vocab_size, seq_length, config.embedding_size, config.numclass, config.num_filters,
-                                config.kernel_size, config.regularizers_lambda, config.dropout)
-        model.summary()
-        model.compile(tf.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+        loss_func = multi_focal_loss2()
+        if config.loss == 'focal_loss':
+            model.compile(tf.optimizers.Adam(), loss=loss_func, metrics=['accuracy'])
+        else:
+            # loss 主要分为两类，框架内定义好的 和 自定义的，解决不同的问题采用不同的框架
+            model.compile(tf.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
         tb_callback = keras.callbacks.TensorBoard(histogram_freq=0.1, write_graph=True,
                                                   write_grads=True, write_images=True,
                                                   embeddings_freq=0.5, update_freq='batch')
@@ -412,6 +325,7 @@ class TextCnnMultiDim(object):
         inputs1 = Input(shape=(seq_length,), name='input_data1')
         inputs2 = Input(shape=(seq_length,), name='input_data2')
         inputs3 = Input(shape=(seq_length,), name='input_data3')
+        # 有预训练好的词向量模型
         if os.path.exists(config.embedding_path):
             embddding = self.matrix_func(config.embedding_path)
         embed_initer = keras.initializers.RandomUniform(minval=-1, maxval=1)
@@ -453,7 +367,7 @@ class TextCnnMultiDim(object):
         pool_outputs = keras.layers.Flatten(data_format='channels_last', name='flatten')(pool_outputs)
         pool_outputs = keras.layers.Dropout(dropout_rate, name='dropout')(pool_outputs)
 
-        outputs = keras.layers.Dense(num_classes, activation='softmax',
+        outputs = keras.layers.Dense(num_classes, activation='softmax',  # 分类激活函数，根据任务自行选择
                                      kernel_initializer='glorot_normal',
                                      bias_initializer=keras.initializers.constant(0.1),
                                      kernel_regularizer=keras.regularizers.l2(regularizers_lambda),
@@ -469,7 +383,12 @@ class TextCnnMultiDim(object):
                                      config.num_filters,
                                      config.kernel_size, config.regularizers_lambda, config.dropout)
         model.summary()
-        model.compile(tf.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+        loss_func = multi_focal_loss2()
+        if config.loss == 'focal_loss':
+            model.compile(tf.optimizers.Adam(), loss=loss_func, metrics=['accuracy'])
+        else:
+            # loss 主要分为两类，框架内定义好的 和 自定义的，解决不同的问题采用不同的框架
+            model.compile(tf.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
         tb_callback = keras.callbacks.TensorBoard(histogram_freq=0.1, write_graph=True,
                                                   write_grads=True, write_images=True,
                                                   embeddings_freq=0.5, update_freq='batch')
@@ -512,9 +431,10 @@ class TextRCNN(object):
         :param dropout_rate:
         :return:
         '''
-        input_current = Input(shape=(seq_length,), name='input_current')
-        input_left = Input(shape=(seq_length,), name='input_left')
-        input_right = Input(shape=(seq_length,), name='input_right')
+        input_current = Input(shape=(seq_length,), name='input_current') # 原始句子 xxx
+        input_left = Input(shape=(seq_length,), name='input_left') # 左句子 xxo
+        input_right = Input(shape=(seq_length,), name='input_right') # 右句子 oxx
+        # 有预训练好的词向量模型
         if os.path.exists(config.embedding_path):
             embedding = self.matrix_func(config.embedding_path)
         embed_initer = keras.initializers.RandomUniform(minval=-1, maxval=1)
@@ -533,9 +453,13 @@ class TextRCNN(object):
 
         #         x_left = keras.layers.SimpleRNN(128,return_sequences=True,name='rnn_left')(embed_left) # seq_lenght * 128
         #         x_right = keras.layers.SimpleRNN(128,return_sequences=True,go_backwards=True,name='rnn_right')(embed_right) # seq_lenght * 128
+        '''
+        keras.layers.GRU()
+            return_sequences: True输出全部输出, False输出最后一个输出
+            go_backwards: True相反处理输入序列
+        '''
         x_left = keras.layers.GRU(128, return_sequences=True, name='rnn_left')(embed_left)  # seq_lenght * 128
-        x_right = keras.layers.GRU(128, return_sequences=True, go_backwards=True, name='rnn_right')(
-            embed_right)  # seq_lenght * 128
+        x_right = keras.layers.GRU(128, return_sequences=True, go_backwards=True, name='rnn_right')(embed_right)  # seq_lenght * 128
         x_right = keras.layers.Lambda(lambda x: K.reverse(x, axes=1), name='lambda')(x_right)
 
         x = keras.layers.concatenate([x_left, embed_current, x_right], axis=2,
@@ -557,13 +481,17 @@ class TextRCNN(object):
         model = self.RCNN(vocab_size, seq_length, config.embedding_size, config.numclass,
                           config.kernel_size, config.regularizers_lambda, config.dropout)
         model.summary()
-        model.compile(tf.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+        loss_func = multi_focal_loss2()
+        if config.loss == 'focal_loss':
+            model.compile(tf.optimizers.Adam(), loss=loss_func, metrics=['accuracy'])
+        else:
+            # loss 主要分为两类，框架内定义好的 和 自定义的，解决不同的问题采用不同的框架
+            model.compile(tf.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
         tb_callback = keras.callbacks.TensorBoard(histogram_freq=0.1, write_graph=True,
                                                   write_grads=True, write_images=True,
                                                   embeddings_freq=0.5, update_freq='batch')
         history = model.fit(x=[xtrain_current, xtrain_left, xtrain_right], y=y_train, batch_size=config.batch_size,
-                            epochs=config.epochs,
-                            callbacks=[tb_callback], validation_split=0.1, shuffle=True)
+                            epochs=config.epochs, callbacks=[tb_callback], validation_split=0.1, shuffle=True)
         log("\nSaving model...")
         keras.models.save_model(model, save_path)
         log(history.history)
@@ -598,6 +526,7 @@ class TextRNN(object):
         :return:
         '''
         input = Input(shape=(seq_length,), name='input')
+        # 有预训练好的词向量模型
         if os.path.exists(config.embedding_path):
             embedding = self.matrix_func(config.embedding_path)
         embed_initer = keras.initializers.RandomUniform(minval=-1, maxval=1)
@@ -621,7 +550,12 @@ class TextRNN(object):
         log('\n Train ...')
         model = self.RNN(vocab_size, seq_length, config.embedding_size, config.numclass, config.regularizers_lambda, )
         model.summary()
-        model.compile(tf.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+        loss_func = multi_focal_loss2()
+        if config.loss == 'focal_loss':
+            model.compile(tf.optimizers.Adam(), loss=loss_func, metrics=['accuracy'])
+        else:
+            # loss 主要分为两类，框架内定义好的 和 自定义的，解决不同的问题采用不同的框架
+            model.compile(tf.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
         tb_callback = keras.callbacks.TensorBoard(histogram_freq=0.1, write_graph=True,
                                                   write_grads=True, write_images=True,
                                                   embeddings_freq=0.5, update_freq='batch')
@@ -680,16 +614,12 @@ class Attention(Layer):
         self.W = self.add_weight(shape=(input_shape[-1],),
                                  initializer=self.init,
                                  name='{}_w'.format(self.name), )
-        #                                 regularizer=self.W_regularizer,
-        #                                 constraint=self.W_constraint)
         self.features_dim = input_shape[-1]
 
         if self.bias:
             self.b = self.add_weight(shape=(input_shape[1],),
                                      initializer='zero',
                                      name='{}_b'.format(self.name), )
-        #                                     regularizer=self.b_regularizer,
-        #                                     constraint=self.b_constraint)
         else:
             self.b = None
         self.build = True
@@ -748,6 +678,7 @@ class TextAttBiRNN(Attention):
         :return:
         '''
         input = Input(shape=(seq_length,), name='input')
+        # 有预训练好的词向量模型
         if os.path.exists(config.embedding_path):
             embedding = self.matrix_func(config.embedding_path)
         embed_initer = keras.initializers.RandomUniform(minval=-1, maxval=1)
@@ -773,7 +704,12 @@ class TextAttBiRNN(Attention):
         model = self.AttBiRNN(vocab_size, seq_length, config.embedding_size, config.numclass,
                               config.regularizers_lambda, )
         model.summary()
-        model.compile(tf.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+        loss_func = multi_focal_loss2()
+        if config.loss == 'focal_loss':
+            model.compile(tf.optimizers.Adam(), loss=loss_func, metrics=['accuracy'])
+        else:
+            # loss 主要分为两类，框架内定义好的 和 自定义的，解决不同的问题采用不同的框架
+            model.compile(tf.optimizers.Adam(), loss='binary_crossentropy', metrics=['accuracy'])
         tb_callback = keras.callbacks.TensorBoard(histogram_freq=0.1, write_graph=True,
                                                   write_grads=True, write_images=True,
                                                   embeddings_freq=0.5, update_freq='batch')
@@ -788,3 +724,6 @@ class TextAttBiRNN(Attention):
         y_pred_one_hot = model.predict(x=xtest, batch_size=1, verbose=1)
         return y_pred_one_hot
 
+'''
+深度学习模型 end
+'''
