@@ -234,36 +234,36 @@ def _is_special(ch):
     return bool(ch) and (ch[0] == '[') and (ch[-1] == ']')   
     
 def rematch(self, text, tokens):
-        """给出原始的text和tokenize后的tokens的映射关系
-        """
-        if is_py2: # 判断环境是否是python 2，java不用处理
-                text = unicode(text)
+    """给出原始的text和tokenize后的tokens的映射关系
+    """
+    if is_py2: # 判断环境是否是python 2，java不用处理
+            text = unicode(text)
 
-        if self._do_lower_case: # tokenizer是否low，java统一转小写就行
-                text = text.lower()
+    if self._do_lower_case: # tokenizer是否low，java统一转小写就行
+            text = text.lower()
 
-        normalized_text, char_mapping = '', [] 
-        for i, ch in enumerate(text): # python用法，i表示位置，ch表示对应的字符
-                if self._do_lower_case:
-                        ch = unicodedata.normalize('NFD', ch) # unicode文本标准化https://blog.csdn.net/weixin_43866211/article/details/98384017
-                        ch = ''.join([c for c in ch if unicodedata.category(c) != 'Mn']) # 判断unicode是否属于‘Mn’类型https://zhuanlan.zhihu.com/p/93029007
-                ch = ''.join([ 
-                        c for c in ch
-                        if not (ord(c) == 0 or ord(c) == 0xfffd or self._is_control(c))
-                ]) # 遍历，排除一些特定字符编码值和控制类字符
-                normalized_text += ch
-                char_mapping.extend([i] * len(ch))
+    normalized_text, char_mapping = '', [] 
+    for i, ch in enumerate(text): # python用法，i表示位置，ch表示对应的字符
+            if self._do_lower_case:
+                    ch = unicodedata.normalize('NFD', ch) # unicode文本标准化https://blog.csdn.net/weixin_43866211/article/details/98384017
+                    ch = ''.join([c for c in ch if unicodedata.category(c) != 'Mn']) # 判断unicode是否属于‘Mn’类型https://zhuanlan.zhihu.com/p/93029007
+            ch = ''.join([ 
+                    c for c in ch
+                    if not (ord(c) == 0 or ord(c) == 0xfffd or self._is_control(c))
+            ]) # 遍历，排除一些特定字符编码值和控制类字符
+            normalized_text += ch
+            char_mapping.extend([i] * len(ch))
 
-        text, token_mapping, offset = normalized_text, [], 0
-        for token in tokens:
-                if self._is_special(token): # 特殊含义符号 [CLS] [SEP]
-                        token_mapping.append([])
-                else:
-                        token = self.stem(token)
-                        start = text[offset:].index(token) + offset
-                        end = start + len(token)
-                        token_mapping.append(char_mapping[start:end])
-                        offset = end
+    text, token_mapping, offset = normalized_text, [], 0
+    for token in tokens:
+            if self._is_special(token): # 特殊含义符号 [CLS] [SEP]
+                    token_mapping.append([])
+            else:
+                    token = self.stem(token)
+                    start = text[offset:].index(token) + offset
+                    end = start + len(token)
+                    token_mapping.append(char_mapping[start:end])
+                    offset = end
 
-        return token_mapping
+    return token_mapping
 '''
