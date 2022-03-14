@@ -1,7 +1,8 @@
+
 # _*_coding:utf-8_*_
 # 作者     ：YiSan
-# 创建时间  ：2021/12/2 15:56 
-# 文件     ：RE_bert.py
+# 创建时间  ：2022/3/4 10:04
+# 文件     ：RE.py
 # IDE     : PyCharm
 
 
@@ -25,6 +26,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 mode = 0
 maxlen = 128
 batch_size = 64
+# roberta_tiny
 config_path = '../pre_mode/bert-base-cased-ch/bert_config.json'
 checkpoint_path = '../pre_mode/bert-base-cased-ch/bert_model.ckpt'
 dict_path = '../pre_mode/bert-base-cased-ch/vocab.txt'
@@ -35,28 +37,23 @@ def load_data(filename):
     """
     D = []
     with open(filename, encoding='utf-8') as f:
-        for l in f:
-            l = json.loads(l)
-            D.append({
-                'text': l['text'],
-                'spo_list': [(spo['subject'], spo['predicate'], spo['object'])
-                             for spo in l['spo_list']]
-            })
+        for ls in f:
+            ls = eval(ls)
+            for l in ls:
+                D.append({
+                    'text': l['text'],
+                    'spo_list': [(spo[0].split(':')[0], spo[1].strip(), spo[2].split(':')[0]) for spo in l['spo_list']]
+#                     'spo_list': [(spo[0].strip(), spo[1].strip(), spo[2].strip()) for spo in l['spo_list']]
+                })
     return D
 
-
 # 加载数据集
-train_data = load_data('RE_data/train_data.json')
-valid_data = load_data('RE_data/dev_data.json')
+train_data = load_data('ReLp_data/train.json')
+valid_data = load_data('ReLp_data/dev.json')
 predicate2id, id2predicate = {}, {}
 
-with open('RE_data/all_50_schemas') as f:
-    for l in f:
-        l = json.loads(l)
-        if l['predicate'] not in predicate2id:
-            id2predicate[len(predicate2id)] = l['predicate']
-            predicate2id[l['predicate']] = len(predicate2id)
-
+predicate2id = {'1':1, '2':2, '3':3, '4':4}
+id2predicate = dict([(v,k) for k,v in predicate2id.items()])
 
 # 建立分词器
 tokenizer = Tokenizer(dict_path, do_lower_case=True)
@@ -81,6 +78,7 @@ class data_generator(DataGenerator):
         batch_subject_labels, batch_subject_ids, batch_object_labels = [], [], []
         for is_end, d in self.sample(random):
             token_ids, segment_ids = tokenizer.encode(d['text'], maxlen=maxlen)
+#             print(d)
             # 整理三元组 {s: [(o, p)]}
             spoes = {}
             for s, p, o in d['spo_list']:
@@ -230,7 +228,7 @@ def extract_spoes(text):
     subject_preds = subject_model.predict([token_ids, segment_ids])
     subject_preds[:, [0, -1]] *= 0
     start = np.where(subject_preds[0, :, 0] > 0.6)[0]
-    end = np.where(subject_preds[0, :, 1] > 0.5)[0]
+    end = np.where(subject_preds[0, :, 1] > 0.6)[0]
     subjects = []
     for i in start:
         j = end[end >= i]
@@ -246,7 +244,7 @@ def extract_spoes(text):
         object_preds = object_model.predict([token_ids, segment_ids, subjects])
         object_preds[:, [0, -1]] *= 0
         for subject, object_pred in zip(subjects, object_preds):
-            start = np.where(object_pred[:, :, 0] > 0.6)
+            start = np.where(object_pred[:, :, 0] > 0.5)
             end = np.where(object_pred[:, :, 1] > 0.5)
             for _start, predicate1 in zip(*start):
                 for _end, predicate2 in zip(*end):
@@ -286,7 +284,7 @@ def evaluate(data):
     """评估函数，计算f1、precision、recall
     """
     X, Y, Z = 1e-10, 1e-10, 1e-10
-    f = open('dev_pred.json', 'w', encoding='utf-8')
+    f = open('ReLp_data/dev_pred.json', 'w', encoding='utf-8')
     pbar = tqdm()
     for d in data:
         R = set([SPO(spo) for spo in extract_spoes(d['text'])])
@@ -304,7 +302,7 @@ def evaluate(data):
             'spo_list': list(T),
             'spo_list_pred': list(R),
             'new': list(R - T),
-            'lack': list(T - R),
+#             'lack': list(T - R),
         },
                        ensure_ascii=False,
                        indent=4)
@@ -325,8 +323,8 @@ class Evaluator(keras.callbacks.Callback):
         f1, precision, recall = evaluate(valid_data)
         if f1 >= self.best_val_f1:
             self.best_val_f1 = f1
-            train_model.save_weights('best_model.weights')
-            train_model.save('model/RE_bert.h5')
+            train_model.save_weights('ReLp_data/ReLp.weights')
+            train_model.save('model/ReLp.h5')
 #         optimizer.reset_old_weights()
         print(
             'f1: %.5f, precision: %.5f, recall: %.5f, best f1: %.5f\n' %
@@ -348,4 +346,4 @@ if __name__ == '__main__':
 
 else:
 
-    train_model.load_weights('best_model.weights')
+    train_model.load_weights('ReLp_data/best_model.weights')
