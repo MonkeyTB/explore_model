@@ -243,5 +243,8 @@ def read_label(df):
     '''
     label = []
     for key,row in df.iterrows():
-        label.append(row.label.strip())
+        if isinstance(row.label, str):
+            label.append(row.label.strip())
+        if isinstance(row.label, int):
+            label.append(row.label)
     return label
