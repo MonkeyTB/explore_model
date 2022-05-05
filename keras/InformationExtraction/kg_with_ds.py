@@ -116,15 +116,18 @@ for d in dev_data:
 
 
 def random_generate(d, spo_list_key):
-    r = np.random.random()
+    '''
+    整体可以理解为对同关系下的做了一个数据增强，提高模型的鲁棒性
+    '''
+    r = np.random.random() # 随机生成0-1
     if r > 0.5:
         return d
     else:
-        k = np.random.randint(len(d[spo_list_key]))
+        k = np.random.randint(len(d[spo_list_key])) # 随机抽取第k组关系
         spi = d[spo_list_key][k]
-        k = np.random.randint(len(predicates[spi[1]]))
-        spo = predicates[spi[1]][k]
-        F = lambda s: s.replace(spi[0], spo[0]).replace(spi[2], spo[2])
+        k = np.random.randint(len(predicates[spi[1]])) # 从predicates中随机抽第k组关系下的某一对
+        spo = predicates[spi[1]][k] # 拿出这一对
+        F = lambda s: s.replace(spi[0], spo[0]).replace(spi[2], spo[2]) # 拿出的和当前的做个替换
         text = F(d['text'])
         spo_list = [(F(sp[0]), sp[1], F(sp[2])) for sp in d[spo_list_key]]
         return {'text': text, spo_list_key: spo_list}
@@ -160,16 +163,16 @@ class data_generator:
                 text = ''.join(text_words)
                 items = {} # 构造成指针 {(sp_start,sp_end):(ob_start,ob-end,p_id)}
                 for sp in d[spo_list_key]:
-                    subjectid = text.find(sp[0]) # 主实体起始 id
+                    subjectid = text.find(sp[0]) # 主实体起始 id，代码中用find的方式，实际工程中可以直接标注位置，从而直接获得位置，find的方式可能会存在多词多位置问题
                     objectid = text.find(sp[2])  # 客实体起始 id
                     if subjectid != -1 and objectid != -1:
-                        key = (subjectid, subjectid+len(sp[0]))
+                        key = (subjectid, subjectid+len(sp[0])) # 主实体(start_id, end_id)
                         if key not in items:
                             items[key] = []
                         items[key].append((objectid,
                                            objectid+len(sp[2]),
                                            predicate2id[sp[1]]))
-                if items:
+                if items: # {(sp_start,sp_end):(ob_start,ob-end,p_id)}
                     '''
                     T1:字
                     T2:词
@@ -180,8 +183,8 @@ class data_generator:
                     O1:客实体起始标签
                     O2:客实体结束标签
                     '''
-                    T1.append([char2id.get(c, 1) for c in text]) # 1 是unk，0 是padding
-                    T2.append(text_words)
+                    T1.append([char2id.get(c, 1) for c in text]) # 1 是unk，0 是padding  字
+                    T2.append(text_words) # 词
                     s1, s2 = np.zeros(len(text)), np.zeros(len(text)) # 主实体起始位置标记为 1
                     for j in items:
                         s1[j[0]] = 1
@@ -190,10 +193,15 @@ class data_generator:
                     # array([[1, 6],[2, 7]]),转置了,[1,6]为两个实体的开始位置
                     k1 = choice(k1) # 选择一个开始位置
                     k2 = choice(k2[k2 >= k1]) # 选择开始位置对应的结束位置,可能会取到不是一个实体边界
-                    '''这样做是出于这样的考虑：预测s的时候，可能预测对了首，但是没预测对尾，比如图片的例子，“战狼2”的“战”标注为s的首了，但是有可能“2”没有标注为s的尾，那么按照解码规则，会去寻找下一个尾，可能找到了“吴京”的“京”，所以抽出来的实体变成了“战狼2》的主演吴京”。而拿这个s去找o，应该是什么都找不到才对，也就是让模型学习到了负样本，从而排除了这种错误三元组的出现。如果不是这样子的话，根据本文的设计逻辑，找到s后预测o时几乎都能找到一个o（因为训练o时没有负样本），所以遇到这样的情况就找出了一个错误的三元组，降低了pr。因此，这样做我们虽然没有改变recall，但至少提高了precision。
                     '''
-                    o1, o2 = np.zeros((len(text), num_classes)), np.zeros((len(text), num_classes))
-                    for j in items.get((k1, k2), []):
+                    这样做是出于这样的考虑：预测s的时候，可能预测对了首，但是没预测对尾，比如图片的例子，“战狼2”的“战”标注为s的首了，
+                    但是有可能“2”没有标注为s的尾，那么按照解码规则，会去寻找下一个尾，可能找到了“吴京”的“京”，所以抽出来的实体变成了
+                    “战狼2》的主演吴京”。而拿这个s去找o，应该是什么都找不到才对，也就是让模型学习到了负样本，从而排除了这种错误三元组
+                    的出现。如果不是这样子的话，根据本文的设计逻辑，找到s后预测o时几乎都能找到一个o（因为训练o时没有负样本），所以遇到
+                    这样的情况就找出了一个错误的三元组，降低了pr。因此，这样做我们虽然没有改变recall，但至少提高了precision。
+                    '''
+                    o1, o2 = np.zeros((len(text), num_classes)), np.zeros((len(text), num_classes))  # 这里变为二维数组是为了把关系和o标签都一起预测
+                    for j in items.get((k1, k2), []): # 这里再次印证了上面的注释，当取到不同实体的起始，那么这里对应的结束实体就会为空
                         o1[j[0]][j[2]] = 1
                         o2[j[1]-1][j[2]] = 1
                     S1.append(s1)
@@ -229,10 +237,10 @@ def seq_gather(x):
     """
     seq, idxs = x
     idxs = K.cast(idxs, 'int32')
-    batch_idxs = K.arange(0, K.shape(seq)[0])
-    batch_idxs = K.expand_dims(batch_idxs, 1)
+    batch_idxs = K.arange(0, K.shape(seq)[0]) # shape = (K.shape(seq)[0],)  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    batch_idxs = K.expand_dims(batch_idxs, 1) # shape = (K.shape(seq)[0], 1) [ [0], [1], [2], [3], [4], [5], [6], [7], [8],[9] ]
     idxs = K.concatenate([batch_idxs, idxs], 1)
-    return tf.gather_nd(seq, idxs)
+    return tf.gather_nd(seq, idxs) # 按idxs索引seq
 
 
 def seq_maxpool(x):

@@ -31,6 +31,24 @@ def read_csv(path):
         df = pd.read_excel(path)
         df.dropna(subset=['content','label'],inplace=True)
         return df
+
+def Q2B(uchar):
+    """
+       单个字符 全角转半角
+       踢除零宽字符
+    """
+    inside_code = ord(uchar)
+    if inside_code == 0x3000:
+        inside_code = 0x0020
+    else:
+        inside_code -= 0xfee0
+    if inside_code < 0x0020 or inside_code > 0x7e: #转完之后不是半角字符返回原来的字符
+        return uchar
+    return chr(inside_code).replace('\u200b','').replace('\u200c','').replace('\u200d','').replace('\u200e','').replace('\u200f','').replace('\ufeff','').strip()
+def stringQ2B(ustring):
+    """把字符串全角转半角"""
+    return "".join([Q2B(uchar) for uchar in ustring])
+
 def clean_data(df):
     '''
     :param df:
@@ -225,5 +243,8 @@ def read_label(df):
     '''
     label = []
     for key,row in df.iterrows():
-        label.append(row.label.strip())
+        if isinstance(row.label, str):
+            label.append(row.label.strip())
+        if isinstance(row.label, int):
+            label.append(row.label)
     return label

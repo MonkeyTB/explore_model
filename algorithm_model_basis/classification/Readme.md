@@ -45,4 +45,9 @@ python tf-server.py
     + False : 数字
 
 # 20211210_02_YiSan
-+ 添加修正的交叉熵損失在model.py中，各個模型可以靈活替換，參考來源![鏈接](https://spaces.ac.cn/archives/4293)
++ 添加修正的交叉熵損失在model.py中，各個模型可以灵活替换，參考來源![鏈接](https://spaces.ac.cn/archives/4293)
+
+# 20220215_03_YiSan
++ 添加样本不均衡解决方案 forcal loss
++ 数据标签，可以按config文件配置，也可直接再config文件中写好
++ 新增config配置loss = 'focal_loss'  # 损失函数  'focal_loss' or ''

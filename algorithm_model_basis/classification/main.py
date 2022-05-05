@@ -94,22 +94,12 @@ class get_train(object):
             yvalid = label_one_hot(yvalid, False).numpy()
         timestamp = time.strftime("%Y-%m-%d-%H-%M", time.localtime(time.time()))
         tfv.train(xtrain, labels, len(word2id), seq_length, config.model_path, timestamp)
-        model = load_model(config.model_path)
-        predictions = tfv.test(model, xvalid, yvalid)
-        self.eval(yvalid,predictions)
-    def TextcnnNew(self,tfv,xtrain, xvalid, ytrain, yvalid, word2id,seq_length):
-        '''
-        :return:
-        '''
-        if config.label_multi :
-            labels = label_one_hot(kwargs['ytrain_word'], True)
-            yvalid = label_one_hot(kwargs['yvalid_word'], True)
-        else :
-            labels = label_one_hot(kwargs['ytrain_word'], False).numpy()
-            yvalid = label_one_hot(kwargs['yvalid_word'], False).numpy()
-        timestamp = time.strftime("%Y-%m-%d-%H-%M", time.localtime(time.time()))
-        tfv.train(xtrain, labels, len(word2id), seq_length, config.model_path, timestamp)
-        model = load_model(config.model_path)
+        if config.loss == 'focal_loss':
+            model = load_model(config.model_path, custom_objects={'multi_focal_loss2': multi_focal_loss2()},
+                               compile=False)
+            model.compile(tf.optimizers.Adam(), loss=multi_focal_loss2(), metrics=['accuracy'])
+        else:
+            model = load_model(config.model_path)
         predictions = tfv.test(model, xvalid, yvalid)
         self.eval(yvalid,predictions)
     def TextcnnMultiDim(self,**kwargs):
@@ -124,7 +114,12 @@ class get_train(object):
         log(kwargs['word2id']['<UNK>']+1)
         tfv.train(kwargs['xtrain_char'], kwargs['xtrain_word'], kwargs['xtrain_cx'], labels, len(kwargs['char2id']),
                   kwargs['word2id']['<UNK>']+1, len(kwargs['cx2id']), kwargs['max_length'], config.model_path, timestamp)
-        model = load_model(config.model_path)
+        if config.loss == 'focal_loss':
+            model = load_model(config.model_path, custom_objects={'multi_focal_loss2': multi_focal_loss2()},
+                               compile=False)
+            model.compile(tf.optimizers.Adam(), loss=multi_focal_loss2(), metrics=['accuracy'])
+        else:
+            model = load_model(config.model_path)
         predictions = tfv.test(model, kwargs['xvalid_char'], kwargs['xvalid_word'], kwargs['xvalid_cx'], yvalid)
         self.eval(yvalid, predictions)
     def TextRCnn(self,tfv,xtrain_current, xtrain_left, xtrain_right, xvalid_current, xvalid_left, xvalid_right, ytrain, yvalid, word2id,seq_length):
@@ -139,7 +134,12 @@ class get_train(object):
             yvalid = label_one_hot(yvalid, False).numpy()
         timestamp = time.strftime("%Y-%m-%d-%H-%M", time.localtime(time.time()))
         tfv.train(xtrain_current, xtrain_left, xtrain_right, labels, len(word2id), seq_length, config.model_path, timestamp)
-        model = load_model(config.model_path)
+        if config.loss == 'focal_loss':
+            model = load_model(config.model_path, custom_objects={'multi_focal_loss2': multi_focal_loss2()},
+                               compile=False)
+            model.compile(tf.optimizers.Adam(), loss=multi_focal_loss2(), metrics=['accuracy'])
+        else:
+            model = load_model(config.model_path)
         predictions = tfv.test(model, xvalid_current, xvalid_left, xvalid_right, yvalid)
         self.eval(yvalid,predictions)
     def TextRNN(self,tfv,xtrain, xvalid, ytrain, yvalid, word2id,seq_lengt):
@@ -154,7 +154,12 @@ class get_train(object):
             yvalid = label_one_hot(yvalid, False).numpy()
         timestamp = time.strftime("%Y-%m-%d-%H-%M", time.localtime(time.time()))
         tfv.train(xtrain, labels, len(word2id), seq_length, config.model_path, timestamp)
-        model = load_model(config.model_path)
+        if config.loss == 'focal_loss':
+            model = load_model(config.model_path, custom_objects={'multi_focal_loss2': multi_focal_loss2()},
+                               compile=False)
+            model.compile(tf.optimizers.Adam(), loss=multi_focal_loss2(), metrics=['accuracy'])
+        else:
+            model = load_model(config.model_path)
         predictions = tfv.test(model, xvalid, yvalid)
         self.eval(yvalid,predictions)
     def TextAttBiRNN(self,tfv,xtrain, xvalid, ytrain, yvalid, word2id,seq_lengt):
@@ -169,7 +174,12 @@ class get_train(object):
             yvalid = label_one_hot(yvalid, False).numpy()
         timestamp = time.strftime("%Y-%m-%d-%H-%M", time.localtime(time.time()))
         tfv.train(xtrain, labels, len(word2id), seq_length, config.model_path, timestamp)
-        model = load_model(config.model_path)
+        if config.loss == 'focal_loss':
+            model = load_model(config.model_path, custom_objects={'multi_focal_loss2': multi_focal_loss2()},
+                               compile=False)
+            model.compile(tf.optimizers.Adam(), loss=multi_focal_loss2(), metrics=['accuracy'])
+        else:
+            model = load_model(config.model_path)
         predictions = tfv.test(model, xvalid, yvalid)
         self.eval(yvalid,predictions)
 if __name__ == '__main__':
@@ -201,14 +211,6 @@ if __name__ == '__main__':
         label = read_label(df_origin)
         xtrain, xvalid, ytrain, yvalid = Data_segmentation(np.array(corpus_id), np.array(label))
         get_ob.Textcnn(tfv,xtrain, xvalid, ytrain, yvalid, word2id,seq_length)
-    elif config.model_type == 'TextCnnNew':
-        tfv = TextCnnNew()
-        word2id, id2word = read_vocab(config.vocab_path)
-        df_origin = clean_data(df_origin)
-        corpus_id ,seq_length = train_corpus(df_origin, word2id)
-        label = read_label(df_origin)
-        xtrain, xvalid, ytrain, yvalid = Data_segmentation(np.array(corpus_id), np.array(label))
-        get_ob.TextcnnNew(tfv,xtrain, xvalid, ytrain, yvalid, word2id,seq_length)
     elif config.model_type == 'TextCnnMultiDim': # 多维度编码的Text CNN（字、词、词性）
         tfv = TextCnnMultiDim()
         ## -------------------  数据清洗 + 字典制作 ---------------------

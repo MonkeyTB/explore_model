@@ -40,7 +40,6 @@ class config:
     'LR':'逻辑斯蒂回归'
     'XGBoost':'GBDT'
     'TextCnn':'text cnn model'
-    'TextCnnNew':'text cnn multiembed'
     'TextCnnMultiDim':'多维度编码的Text CNN（字、词、词性）'
     'RCNN':'text RCNN model'
     'TextRNN':'text rnn model'
@@ -60,6 +59,7 @@ class config:
     num_filters = 100
     ch_label_type = True  # True:汉字label,False:数字label
     label_multi = True  # 是否多标签分类
+    loss = 'focal_loss'  # 损失函数  'focal_loss' or ''
 
     data_path = r'data/corpus.xlsx'  # 训练文本路径
     stop_path = r'data/wv/stopword.txt'  # 停用词表
@@ -68,11 +68,10 @@ class config:
     log_path = r'log/log_' + model_type + '.txt'  # 日志文件
     vocab_path = r'data/wv/vocab.txt'  # vocabulary 文件
     model_path = r'model/' + model_type  # 模型存储文件'
-    label_path = r'data/wv/tag_desc_DDA.txt'  # label 文件
+    label_path = r'data/wv/tag.txt'  # label 文件
     mkdir(model_path)
     try:
         dict_lable = get_label(label_path)
     except:
-#         dict_lable = {'其他口号': 0, '工作时间': 1, '要求': 2, '描述': 3, '薪资福利': 4, '公司介绍': 5, '工作地址': 6, '岗位晋升/职业发展': 7, '联系方式': 8,'职位名称':9}
-        dict_lable = {'其他口号': 0, '工作时间': 0, '要求': 2, '描述': 3, '薪资福利': 4, '公司介绍': 0, '工作地址': 0, '岗位晋升/职业发展': 4, '联系方式': 0,'职位名称':1}
-#     numclass = len(dict_lable)
+        dict_lable = {'其他口号': 0, '工作时间': 1, '要求': 2, '描述': 3, '薪资福利': 4, '公司介绍': 5, '工作地址': 6, '岗位晋升/职业发展': 7, '联系方式': 8,'职位名称':9}
+    numclass = len(dict_lable)
