@@ -126,7 +126,7 @@ class NameEntityRecognizer(object):
     NER 识别器
     '''
     def recognize(self, text, threshold = 0):
-        tokens = tokenizer.tokenizer(text, max_len = 512)
+        tokens = tokenizer.tokenize(text, maxlen = 512)
         mapping = tokenizer.rematch(text, tokens)
         token_ids = tokenizer.tokens_to_ids(tokens)
         segment_ids = [0] * len(token_ids)
